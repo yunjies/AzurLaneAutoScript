@@ -295,6 +295,96 @@ Windows 开机
 
 ---
 
+## Unraid Docker 部署（MCP Server）
+
+**架构**：MCP Server 运行在 Unraid Docker 中，通过内网控制 Windows PC 上的 ALAS + 模拟器。
+
+```
+┌─────────────────┐
+│  WorkBuddy（手机/电脑）                         │
+│      ↓ MCP 协议（SSE 远程连接）                  │
+│  MCP Server（Unraid Docker）                   │
+│      ↓ HTTP REST API                           │
+│  ALAS WebUI（Windows PC :22267）              │
+│      ↓ ADB                                    │
+│  模拟器（Windows PC）                          │
+└─────────────────┘
+```
+
+### 前置条件
+
+1. **Windows PC 运行 `alas_launcher.exe`**（系统托盘常驻）
+   - Launcher 内置 HTTP API（端口 `22333`）
+   - 负责启动/停止模拟器、ALAS
+2. **ALAS WebUI 正常运行**（端口 `22267`）
+3. **Windows PC 防火墙开放端口** `22267` 和 `22333`
+
+### 部署步骤
+
+#### 1. 构建 Docker 镜像（Unraid 上操作）
+
+```bash
+# 在 Unraid 的 shell 中，进入 ALAS 仓库的 deploy/docker/ 目录
+cd /mnt/user/appdata/ALAS/AzurLaneAutoScript/deploy/docker/
+
+# 构建镜像
+docker build -t alas-mcp:latest ..
+```
+
+#### 2. 启动容器
+
+```bash
+docker run -d \
+  --name alas-mcp \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -e ALAS_API_BASE=http://192.168.1.100:22267 \
+  -e EMULATOR_API_BASE=http://192.168.1.100:22333 \
+  alas-mcp:latest
+```
+
+> ⚠️ 将 `192.168.1.100` 替换为你的 Windows PC 的内网 IP！
+
+#### 3. 配置 WorkBuddy 连接
+
+在 WorkBuddy 的 `mcp.json` 中添加：
+
+```json
+{
+  "mcpServers": {
+    "alas": {
+      "url": "http://192.168.1.217:8080/sse"
+    }
+  }
+}
+```
+
+> `192.168.1.217` 是 Unraid 的 IP，端口 `8080` 是 MCP Server 的 SSE 端口。
+
+### 可用的 MCP 工具
+
+| 工具 | 说明 |
+|------|------|
+| `alas_list_instances` | 列出所有 ALAS 实例 |
+| `alas_get_status` | 查看 ALAS 运行状态 |
+| `alas_start` / `alas_stop` | 启动/停止 ALAS 调度 |
+| `alas_run_task` | 运行单次任务（刷图等） |
+| `alas_get_log` | 查看日志 |
+| `alas_screenshot` | 截图 |
+| `emulator_start` | 远程启动模拟器（需 Windows PC 的 Launcher） |
+| `emulator_stop` | 远程停止模拟器 |
+
+### Windows PC 端配置
+
+确保 `alas_launcher.exe` 正在运行（系统托盘有图标），且防火墙允许端口 `22333` 入站：
+
+```powershell
+# 管理员权限运行
+New-NetFirewallRule -DisplayName "ALAS Launcher API" -Direction Inbound -LocalPort 22333 -Protocol TCP -Action Allow
+```
+
+---
+
 ## 文档 Documents
 
 [海图识别 perspective](https://github.com/LmeSzinc/AzurLaneAutoScript/wiki/perspective)
