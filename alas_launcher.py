@@ -39,7 +39,7 @@ MCP_SERVER = ALAS_DIR / "mcp_server.py"
 # MCP Server 使用系统 Python（PyInstaller exe 不包含 mcp 包）
 MCP_PYTHON = Path(os.getenv(
     "MCP_PYTHON",
-    r"C:\Users\YunjieShi\AppData\Local\Programs\Python\Python313\python.exe",
+    r"C:\Program Files\Python313\python.exe",
 ))
 ALAS_API_URL = "http://127.0.0.1:22267"
 
