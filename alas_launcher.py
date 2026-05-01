@@ -11,7 +11,9 @@ ALAS Launcher - 系统托盘管理器
 打包：pyinstaller --onefile --windowed --name alas_launcher alas_launcher.py
 """
 
+import ctypes
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -155,6 +157,75 @@ class ProcessManager:
 
 pm = ProcessManager()
 
+# ---------------------------------------------------------------------------
+# 单实例检测（socket 绑定法，跨平台）
+# ---------------------------------------------------------------------------
+SINGLE_INSTANCE_PORT = 22999  # ALAS Launcher 专用端口
+
+def ensure_single_instance() -> socket.socket | None:
+    """
+    确保只有一个 Launcher 实例运行。
+    返回 server_socket（首次启动）或 None（已在运行，已提示并退出）。
+    """
+    # 先尝试连接，看是否已有实例
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.settimeout(1)
+        result = probe.connect_ex(("127.0.0.1", SINGLE_INSTANCE_PORT))
+        if result == 0:
+            # 端口已绑定，说明已有实例在运行
+            probe.close()
+            _notify_already_running()
+            sys.exit(0)
+        probe.close()
+    except Exception:
+        pass
+
+    # 没有实例运行，绑定端口占位
+    try:
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_sock.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
+        server_sock.listen(1)
+        print(f"[Launcher] 单实例锁已获取 (port {SINGLE_INSTANCE_PORT})")
+        return server_sock
+    except OSError as e:
+        # 绑定失败，说明已有实例
+        _notify_already_running()
+        sys.exit(0)
+
+
+def _notify_already_running():
+    """提示用户 Launcher 已在运行（Windows 弹窗 + 控制台）"""
+    msg = "ALAS Launcher 已经在运行中，无法重复启动。"
+    print(f"[Launcher] {msg}")
+    # Windows 弹窗提示
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                "ALAS Launcher 已经在运行！\n\n请检查系统托盘区域（右下角）。",
+                "ALAS Launcher",
+                0x40,  # MB_ICONINFORMATION
+            )
+        except Exception:
+            pass
+
+
+single_instance_sock = None  # 持有 socket 保持单实例锁
+
+
+def release_single_instance():
+    """释放单实例锁"""
+    global single_instance_sock
+    if single_instance_sock is not None:
+        try:
+            single_instance_sock.close()
+        except Exception:
+            pass
+        single_instance_sock = None
+        print("[Launcher] 单实例锁已释放")
+
 
 # ---------------------------------------------------------------------------
 # 托盘菜单
@@ -182,6 +253,7 @@ def on_open_log(icon, item):
 def on_exit(icon, item):
     print("[Launcher] 退出中...")
     pm.stop_all()
+    release_single_instance()
     icon.stop()
 
 
@@ -201,12 +273,18 @@ def build_menu():
 # 主流程
 # ---------------------------------------------------------------------------
 def main():
+    global single_instance_sock
+
     print("=" * 60)
     print("  ALAS Launcher v0.1.0 - 系统托盘管理器")
     print("=" * 60)
     print(f"ALAS 目录: {ALAS_DIR}")
     print(f"MCP Python: {MCP_PYTHON}")
     print()
+
+    # 0. 单实例检测（必须在最前面，最先执行）
+    single_instance_sock = ensure_single_instance()
+    # ensure_single_instance() 在检测到已有实例时会直接 sys.exit(0)，不会返回
 
     # 1. 先启动 MCP Server
     pm.start_mcp()
@@ -232,5 +310,6 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\n[Launcher] 收到退出信号")
+        release_single_instance()
         pm.stop_all()
         sys.exit(0)
