@@ -37,6 +37,7 @@ import uvicorn
 # Config
 # ---------------------------------------------------------------------------
 ALAS_API_BASE = os.getenv("ALAS_API_BASE", "http://127.0.0.1:22267")
+EMULATOR_API_BASE = os.getenv("EMULATOR_API_BASE", "")
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 # ---------------------------------------------------------------------------
@@ -59,6 +60,19 @@ async def api_put(path: str, body: dict) -> dict:
 async def api_post(path: str, body: dict | None = None) -> dict:
     async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True) as client:
         r = await client.post(f"{ALAS_API_BASE}{path}", json=body)
+        r.raise_for_status()
+        return r.json()
+
+
+# ---------------------------------------------------------------------------
+# Emulator API helpers (calls Launcher HTTP API on Windows PC)
+# ---------------------------------------------------------------------------
+async def emulator_api_post(path: str) -> dict:
+    """调用 Windows PC 上 Launcher 的 HTTP API"""
+    if not EMULATOR_API_BASE:
+        return {"success": False, "message": "EMULATOR_API_BASE 未配置，请在环境变量中设置 Windows PC 的 IP:22333"}
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(f"{EMULATOR_API_BASE}{path}")
         r.raise_for_status()
         return r.json()
 
@@ -168,6 +182,18 @@ async def list_tools() -> list[Tool]:
             description="【危险】执行 ALAS 自更新（git pull + pip install），会重启 ALAS。仅在用户明确要求时调用。",
             inputSchema={"type": "object", "properties": {}},
         ),
+        Tool(
+            name="emulator_start",
+            description="启动模拟器（需要 Windows PC 上的 Launcher HTTP API）。"
+                       "使用前请确认 EMULATOR_API_BASE 已配置为 Windows PC 的 IP:22333。",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="emulator_stop",
+            description="停止模拟器（需要 Windows PC 上的 Launcher HTTP API）。"
+                       "使用前请确认 EMULATOR_API_BASE 已配置为 Windows PC 的 IP:22333。",
+            inputSchema={"type": "object", "properties": {}},
+        ),
     ]
 
 
@@ -234,6 +260,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "alas_perform_update":
             data = await api_post("/api/update/run", {})
+            return [TextContent(type="text", text=json.dumps(data, indent=2, ensure_ascii=False))]
+
+        elif name == "emulator_start":
+            data = await emulator_api_post("/emulator/start")
+            return [TextContent(type="text", text=json.dumps(data, indent=2, ensure_ascii=False))]
+
+        elif name == "emulator_stop":
+            data = await emulator_api_post("/emulator/stop")
             return [TextContent(type="text", text=json.dumps(data, indent=2, ensure_ascii=False))]
 
         else:

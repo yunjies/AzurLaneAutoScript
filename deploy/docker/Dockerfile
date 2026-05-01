@@ -1,23 +1,27 @@
-# docker build -t hgjazhgj/alas:latest .
-# docker run -v ${PWD}:/app/AzurLaneAutoScript -p 22267:22267 --name alas -it --rm hgjazhgj/alas
+FROM python:3.13-slim
 
-FROM python:3.7-slim-bullseye
+LABEL maintainer="yunjies"
+LABEL description="ALAS MCP Server - 远程控制 ALAS 的 MCP 服务"
 
-WORKDIR /app/AzurLaneAutoScript
+# 安装依赖
+RUN pip install --no-cache-dir \
+    mcp>=1.0.0 \
+    httpx \
+    starlette \
+    uvicorn
 
-COPY requirements.txt /tmp/requirements.txt
+# 创建应用目录
+WORKDIR /app
 
-# Initial download of UiAutomator2 is slow outside of China using appetizer mirror, switch to GitHub
-RUN apt update \
- && apt install -y git adb libgomp1 openssh-client \
- && apt install -y build-essential pkg-config \
- && apt install -y libavformat-dev libavcodec-dev libavdevice-dev \
- && apt install -y libavutil-dev libswscale-dev libswresample-dev libavfilter-dev \
- && git config --global --add safe.directory '*' \
- && pip install Cython==0.29.37 \
- && pip install av==10.0.0 --no-build-isolation \
- && pip install -r /tmp/requirements.txt \
- && rm /tmp/requirements.txt \
- && rm -r ~/.cache/pip
+# 复制 mcp_server.py（构建时需要 ALAS 仓库上下文）
+COPY mcp_server.py /app/mcp_server.py
 
-CMD python gui.py
+# 暴露 SSE 端口
+EXPOSE 8080
+
+# 默认环境变量（可在 docker-compose 或运行时覆盖）
+ENV ALAS_API_BASE=http://192.168.1.100:22267
+ENV EMULATOR_API_BASE=http://192.168.1.100:22333
+
+# 启动 SSE 模式
+CMD ["python", "mcp_server.py", "--transport", "sse", "--host", "0.0.0.0", "--port", "8080"]

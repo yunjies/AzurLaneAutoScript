@@ -15,6 +15,8 @@ ALAS Launcher - 系统托盘管理器
 """
 
 import ctypes
+import http.server
+import json
 import os
 import socket
 import subprocess
@@ -51,6 +53,116 @@ MCP_PYTHON = Path(os.getenv(
     r"C:\Program Files\Python313\python.exe",
 ))
 ALAS_API_URL = "http://127.0.0.1:22267"
+
+# ---------------------------------------------------------------------------
+# 模拟器配置（可通过环境变量覆盖）
+# ---------------------------------------------------------------------------
+EMULATOR_TYPE = os.getenv("EMULATOR_TYPE", "bluestacks")  # bluestacks / ldplayer / nox
+EMULATOR_PATH = os.getenv("EMULATOR_PATH", "")
+EMULATOR_API_PORT = int(os.getenv("EMULATOR_API_PORT", "22333"))
+
+
+# ---------------------------------------------------------------------------
+# 模拟器控制
+# ---------------------------------------------------------------------------
+def start_emulator():
+    """启动模拟器"""
+    if EMULATOR_TYPE == "bluestacks":
+        exe = EMULATOR_PATH or str(ALAS_DIR / "BlueStacks" / "HD-Player.exe")
+    elif EMULATOR_TYPE == "ldplayer":
+        exe = EMULATOR_PATH or r"C:\LDPlayer\LDPlayer9\dnplayer.exe"
+    elif EMULATOR_TYPE == "nox":
+        exe = EMULATOR_PATH or r"C:\Program Files\Nox\bin\Nox.exe"
+    else:
+        return False, f"未知模拟器类型: {EMULATOR_TYPE}"
+
+    if not Path(exe).exists():
+        return False, f"模拟器可执行文件不存在: {exe}"
+
+    try:
+        subprocess.Popen(
+            exe,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        return True, f"模拟器已启动: {exe}"
+    except Exception as e:
+        return False, f"启动模拟器失败: {e}"
+
+
+def stop_emulator():
+    """停止模拟器"""
+    if EMULATOR_TYPE == "bluestacks":
+        name = "HD-Player.exe"
+    elif EMULATOR_TYPE == "ldplayer":
+        name = "dnplayer.exe"
+    elif EMULATOR_TYPE == "nox":
+        name = "Nox.exe"
+    else:
+        return False, f"未知模拟器类型: {EMULATOR_TYPE}"
+
+    try:
+        subprocess.run(
+            ["taskkill", "/f", "/im", name],
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        return True, f"模拟器已停止: {name}"
+    except Exception as e:
+        return False, f"停止模拟器失败: {e}"
+
+
+# ---------------------------------------------------------------------------
+# HTTP API Server（供远程 MCP Server 调用）
+# ---------------------------------------------------------------------------
+class LauncherAPIHandler(http.server.BaseHTTPRequestHandler):
+    """简单的 HTTP API 处理器"""
+
+    def _set_headers(self, status=200, content_type="application/json"):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+    def _json_response(self, data: dict, status=200):
+        self._set_headers(status)
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def do_OPTIONS(self):
+        self._set_headers()
+        self.wfile.write(b"")
+
+    def do_GET(self):
+        if self.path == "/health":
+            self._json_response({"status": "ok", "pid": os.getpid()})
+        else:
+            self._json_response({"error": "Not found"}, 404)
+
+    def do_POST(self):
+        if self.path == "/emulator/start":
+            ok, msg = start_emulator()
+            self._json_response({"success": ok, "message": msg}, 200 if ok else 500)
+        elif self.path == "/emulator/stop":
+            ok, msg = stop_emulator()
+            self._json_response({"success": ok, "message": msg}, 200 if ok else 500)
+        elif self.path == "/alas/start":
+            pm.start_alas()
+            self._json_response({"success": True, "message": "ALAS 启动中"})
+        elif self.path == "/alas/stop":
+            pm.stop_alas()
+            self._json_response({"success": True, "message": "ALAS 已停止"})
+        else:
+            self._json_response({"error": "Not found"}, 404)
+
+    def log_message(self, format, *args):
+        # 静默日志（避免控制台刷屏）
+        pass
+
+
+def start_http_server():
+    """在独立线程中启动 HTTP API 服务"""
+    server = http.server.HTTPServer(("0.0.0.0", EMULATOR_API_PORT), LauncherAPIHandler)
+    print(f"[Launcher] HTTP API 已启动，监听端口 {EMULATOR_API_PORT}")
+    server.serve_forever()
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +421,11 @@ def main():
     # 0. 单实例检测（必须在最前面，最先执行）
     single_instance_sock = ensure_single_instance()
     # ensure_single_instance() 在检测到已有实例时会直接 sys.exit(0)，不会返回
+
+    # 0.5 启动 HTTP API 服务（供远程 MCP Server 调用）
+    http_thread = threading.Thread(target=start_http_server, daemon=True)
+    http_thread.start()
+    time.sleep(1)
 
     # 1. 先启动 MCP Server
     pm.start_mcp()
