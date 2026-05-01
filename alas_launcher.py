@@ -1,0 +1,236 @@
+"""
+ALAS Launcher - 系统托盘管理器
+开机自启，管理 MCP Server + ALAS.bat，支持右键菜单操作。
+
+路径检测逻辑：
+  - 作为 PyInstaller exe 运行时：使用 exe 所在目录作为 ALAS_DIR
+  - 作为脚本运行时：使用脚本所在目录作为 ALAS_DIR
+  - 可通过环境变量 ALAS_DIR 覆盖
+
+依赖：pystray, Pillow
+打包：pyinstaller --onefile --windowed --name alas_launcher alas_launcher.py
+"""
+
+import os
+import subprocess
+import sys
+import threading
+import time
+import webbrowser
+from pathlib import Path
+
+import pystray
+from PIL import Image, ImageDraw, ImageFont
+
+
+# ---------------------------------------------------------------------------
+# 路径检测
+# ---------------------------------------------------------------------------
+if getattr(sys, "frozen", False):
+    # PyInstaller exe 模式
+    EXE_DIR = Path(sys.executable).parent
+else:
+    # 脚本模式
+    EXE_DIR = Path(__file__).parent
+
+ALAS_DIR = Path(os.getenv("ALAS_DIR", str(EXE_DIR)))
+ALAS_BAT = ALAS_DIR / "ALAS.bat"
+MCP_SERVER = ALAS_DIR / "mcp_server.py"
+# MCP Server 使用系统 Python（PyInstaller exe 不包含 mcp 包）
+MCP_PYTHON = Path(os.getenv(
+    "MCP_PYTHON",
+    r"C:\Users\YunjieShi\AppData\Local\Programs\Python\Python313\python.exe",
+))
+ALAS_API_URL = "http://127.0.0.1:22267"
+
+
+# ---------------------------------------------------------------------------
+# 图标生成
+# ---------------------------------------------------------------------------
+def create_icon(width=64, height=64):
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse([4, 4, width - 4, height - 4], fill=(70, 130, 200, 255))
+    try:
+        font = ImageFont.truetype("arial.ttf", 28)
+    except Exception:
+        font = ImageFont.load_default()
+    bbox = draw.textbbox((0, 0), "A", font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    draw.text(
+        ((width - tw) // 2, (height - th) // 2 - 4),
+        "A",
+        fill=(255, 255, 255, 255),
+        font=font,
+    )
+    return image
+
+
+# ---------------------------------------------------------------------------
+# 子进程管理
+# ---------------------------------------------------------------------------
+class ProcessManager:
+    def __init__(self):
+        self.alas_proc = None
+        self.mcp_proc = None
+        self.mcp_thread = None
+
+    def start_alas(self):
+        if self.alas_proc is not None and self.alas_proc.poll() is None:
+            print("[Launcher] ALAS 已在运行")
+            return
+        if not ALAS_BAT.exists():
+            print(f"[Launcher] 找不到 {ALAS_BAT}，跳过 ALAS 启动")
+            return
+        print(f"[Launcher] 启动 ALAS: {ALAS_BAT}")
+        self.alas_proc = subprocess.Popen(
+            str(ALAS_BAT),
+            cwd=str(ALAS_DIR),
+            shell=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+
+    def stop_alas(self):
+        if self.alas_proc is not None and self.alas_proc.poll() is None:
+            print("[Launcher] 停止 ALAS...")
+            self.alas_proc.terminate()
+            try:
+                self.alas_proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.alas_proc.kill()
+        self.alas_proc = None
+
+    def restart_alas(self):
+        print("[Launcher] 重启 ALAS...")
+        self.stop_alas()
+        time.sleep(2)
+        self.start_alas()
+
+    def start_mcp(self):
+        if self.mcp_thread is not None and self.mcp_thread.is_alive():
+            print("[Launcher] MCP Server 已在运行")
+            return
+        if not MCP_SERVER.exists():
+            print(f"[Launcher] 找不到 {MCP_SERVER}，跳过 MCP 启动")
+            return
+
+        def _run_mcp():
+            print(f"[Launcher] 启动 MCP Server: {MCP_SERVER}")
+            env = os.environ.copy()
+            env["ALAS_API_BASE"] = ALAS_API_URL
+            self.mcp_proc = subprocess.Popen(
+                [str(MCP_PYTHON), str(MCP_SERVER)],
+                cwd=str(ALAS_DIR),
+                env=env,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            self.mcp_proc.wait()
+            print("[Launcher] MCP Server 已退出")
+
+        self.mcp_thread = threading.Thread(target=_run_mcp, daemon=True)
+        self.mcp_thread.start()
+
+    def stop_mcp(self):
+        if self.mcp_proc is not None and self.mcp_proc.poll() is None:
+            print("[Launcher] 停止 MCP Server...")
+            self.mcp_proc.terminate()
+            try:
+                self.mcp_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.mcp_proc.kill()
+        self.mcp_proc = None
+
+    def restart_mcp(self):
+        print("[Launcher] 重启 MCP Server...")
+        self.stop_mcp()
+        time.sleep(1)
+        self.start_mcp()
+
+    def stop_all(self):
+        print("[Launcher] 停止所有子进程...")
+        self.stop_alas()
+        self.stop_mcp()
+
+
+pm = ProcessManager()
+
+
+# ---------------------------------------------------------------------------
+# 托盘菜单
+# ---------------------------------------------------------------------------
+def on_restart_alas(icon, item):
+    pm.restart_alas()
+    icon.notify("ALAS 正在重启...", "ALAS Launcher")
+
+
+def on_restart_mcp(icon, item):
+    pm.restart_mcp()
+    icon.notify("MCP Server 正在重启...", "ALAS Launcher")
+
+
+def on_open_webui(icon, item):
+    webbrowser.open(ALAS_API_URL)
+
+
+def on_open_log(icon, item):
+    log_dir = ALAS_DIR / "log"
+    if log_dir.exists():
+        os.startfile(str(log_dir))
+
+
+def on_exit(icon, item):
+    print("[Launcher] 退出中...")
+    pm.stop_all()
+    icon.stop()
+
+
+def build_menu():
+    return pystray.Menu(
+        pystray.MenuItem("重启 ALAS", on_restart_alas),
+        pystray.MenuItem("重启 MCP Server", on_restart_mcp),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("打开 WebUI", on_open_webui),
+        pystray.MenuItem("打开日志目录", on_open_log),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("退出", on_exit),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 主流程
+# ---------------------------------------------------------------------------
+def main():
+    print("=" * 60)
+    print("  ALAS Launcher v0.1.0 - 系统托盘管理器")
+    print("=" * 60)
+    print(f"ALAS 目录: {ALAS_DIR}")
+    print(f"MCP Python: {MCP_PYTHON}")
+    print()
+
+    # 1. 先启动 MCP Server
+    pm.start_mcp()
+    time.sleep(2)
+
+    # 2. 再启动 ALAS.bat
+    pm.start_alas()
+    time.sleep(3)
+
+    # 3. 系统托盘
+    icon = pystray.Icon(
+        "alas_launcher",
+        icon=create_icon(),
+        menu=build_menu(),
+        title="ALAS Launcher",
+    )
+    print("[Launcher] 系统托盘已启动，右键图标进行操作")
+    icon.run()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[Launcher] 收到退出信号")
+        pm.stop_all()
+        sys.exit(0)
