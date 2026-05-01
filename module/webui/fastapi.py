@@ -3,6 +3,7 @@ Copy from pywebio.platform.fastapi
 """
 import asyncio
 import os
+from contextlib import asynccontextmanager
 
 import uvicorn
 from pywebio.platform.fastapi import (STATIC_PATH, Session, cdn_validation,
@@ -21,6 +22,24 @@ class HeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+class CORSMiddleware(BaseHTTPMiddleware):
+    """
+    Minimal CORS middleware for mobile web clients on LAN.
+    Handles OPTIONS preflight and adds CORS headers to all responses.
+    """
+    async def dispatch(self, request, call_next):
+        # Handle OPTIONS preflight directly
+        if request.method == "OPTIONS":
+            from starlette.responses import Response
+            response = Response(status_code=204)
+        else:
+            response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         return response
 
 
@@ -54,9 +73,37 @@ def asgi_app(
             name="pywebio_static",
         )
     )
-    middleware = [Middleware(HeaderMiddleware)]
+    # Mount ALAS REST API under /api
+    try:
+        from module.api.router import api_router
+        routes.append(Mount("/api", app=api_router))
+    except Exception as e:
+        import logging
+        logging.getLogger("alas.api").warning(f"Failed to mount API router: {e}")
+    middleware = [Middleware(HeaderMiddleware), Middleware(CORSMiddleware)]
+    # Starlette 1.0+ removed on_startup/on_shutdown, use lifespan instead
+    on_startup = starlette_settings.pop("on_startup", None)
+    on_shutdown = starlette_settings.pop("on_shutdown", None)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        if on_startup:
+            for func in on_startup:
+                if asyncio.iscoroutinefunction(func):
+                    await func()
+                else:
+                    func()
+        yield
+        if on_shutdown:
+            for func in on_shutdown:
+                if asyncio.iscoroutinefunction(func):
+                    await func()
+                else:
+                    func()
+
     return Starlette(
-        routes=routes, middleware=middleware, debug=debug, **starlette_settings
+        routes=routes, middleware=middleware, debug=debug,
+        lifespan=lifespan, **starlette_settings
     )
 
 
