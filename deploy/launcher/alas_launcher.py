@@ -3,12 +3,15 @@ ALAS Launcher - 系统托盘管理器
 开机自启，管理 MCP Server + ALAS.bat，支持右键菜单操作。
 
 路径检测逻辑：
-  - 作为 PyInstaller exe 运行时：使用 exe 所在目录作为 ALAS_DIR
-  - 作为脚本运行时：使用脚本所在目录作为 ALAS_DIR
+  - 作为 PyInstaller exe 运行时：exe 在 ALAS 根目录，直接使用
+  - 作为脚本运行时：脚本在 deploy/launcher/，向上两级到 ALAS 根目录
   - 可通过环境变量 ALAS_DIR 覆盖
 
+图标：与 ALAS 保持一致，使用 deploy/launcher/icon.ico
+
 依赖：pystray, Pillow
-打包：pyinstaller --onefile --windowed --name alas_launcher alas_launcher.py
+打包：pyinstaller --onefile --windowed --icon deploy/launcher/icon.ico --name alas_launcher deploy/launcher/alas_launcher.py
+  （输出 exe 到 ALAS 根目录）
 """
 
 import ctypes
@@ -29,13 +32,17 @@ from PIL import Image, ImageDraw, ImageFont
 # 路径检测
 # ---------------------------------------------------------------------------
 if getattr(sys, "frozen", False):
-    # PyInstaller exe 模式
+    # PyInstaller exe 模式 — exe 在 ALAS 根目录
     EXE_DIR = Path(sys.executable).parent
+    ALAS_DIR = EXE_DIR
+    RESOURCE_DIR = EXE_DIR          # icon.ico 与 exe 同目录
 else:
-    # 脚本模式
-    EXE_DIR = Path(__file__).parent
+    # 脚本模式 — 脚本在 deploy/launcher/，ALAS 根目录在两级之上
+    SCRIPT_DIR = Path(__file__).parent.resolve()
+    RESOURCE_DIR = SCRIPT_DIR       # icon.ico 与脚本同目录
+    ALAS_DIR = SCRIPT_DIR.parent.parent.resolve()
 
-ALAS_DIR = Path(os.getenv("ALAS_DIR", str(EXE_DIR)))
+ALAS_DIR = Path(os.getenv("ALAS_DIR", str(ALAS_DIR)))
 ALAS_BAT = ALAS_DIR / "ALAS.bat"
 MCP_SERVER = ALAS_DIR / "mcp_server.py"
 # MCP Server 使用系统 Python（PyInstaller exe 不包含 mcp 包）
@@ -47,9 +54,26 @@ ALAS_API_URL = "http://127.0.0.1:22267"
 
 
 # ---------------------------------------------------------------------------
-# 图标生成
+# 图标加载（使用 ALAS 图标）
 # ---------------------------------------------------------------------------
+def get_icon_path():
+    """返回 icon.ico 的绝对路径"""
+    return RESOURCE_DIR / "icon.ico"
+
+
 def create_icon(width=64, height=64):
+    """
+    加载 ALAS icon.ico 作为托盘图标。
+    如果 icon.ico 不存在，回退到程序生成的图标。
+    """
+    icon_path = get_icon_path()
+    if icon_path.exists():
+        try:
+            return Image.open(str(icon_path)).resize((width, height))
+        except Exception as e:
+            print(f"[Launcher] 加载图标失败: {e}，使用默认图标")
+
+    # 回退：生成简单图标
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     draw.ellipse([4, 4, width - 4, height - 4], fill=(70, 130, 200, 255))

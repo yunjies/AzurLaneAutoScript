@@ -213,6 +213,22 @@ Claude Desktop（`claude_desktop_config.json`）：
 
 `alas_launcher.exe` 是一个 Windows 系统托盘程序，管理 ALAS + MCP Server 的完整生命周期，**开机自启**，无需手动操作。
 
+Launcher 相关文件统一放在 `deploy/launcher/` 目录，打包后的 exe 放在 ALAS 根目录。
+
+### 文件结构
+
+```
+AzurLaneAutoScript/
+├── alas_launcher.exe        # 打包后的 exe（放在根目录）
+├── deploy/
+│   └── launcher/
+│       ├── alas_launcher.py  # Launcher 源码
+│       ├── icon.ico           # ALAS 图标（exe + 托盘共用）
+│       ├── Alas.bat           # ALAS 启动脚本
+│       └── Alas-gui.bat      # ALAS GUI 启动脚本
+└── ...
+```
+
 ### 功能
 
 - 开机自动启动（注册表 `HKCU\...\Run`）
@@ -229,9 +245,10 @@ Claude Desktop（`claude_desktop_config.json`）：
 
 ```bash
 # 开发模式（直接运行脚本）
+cd deploy/launcher
 python alas_launcher.py
 
-# 生产模式（运行打包好的 exe）
+# 生产模式（运行打包好的 exe，放在 ALAS 根目录）
 E:\AzurLaneAutoScript\alas_launcher.exe
 ```
 
@@ -239,7 +256,8 @@ E:\AzurLaneAutoScript\alas_launcher.exe
 
 ```bash
 pip install pyinstaller pystray Pillow
-python -m PyInstaller --onefile --noconsole --name alas_launcher alas_launcher.py
+cd deploy/launcher
+python -m PyInstaller --onefile --windowed --icon icon.ico --name alas_launcher alas_launcher.py
 # 输出：dist/alas_launcher.exe → 复制到 ALAS 根目录
 ```
 
