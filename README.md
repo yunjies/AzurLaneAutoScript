@@ -131,6 +131,152 @@ GUI development, thanks **[@18870](https://github.com/18870)** , say HURRAY.
 
 
 
+## AI 控制接口（MCP Server）
+
+ALAS 支持通过 MCP（Model Context Protocol）被 AI 助手（如 Claude、WorkBuddy）控制，实现自然语言操控游戏脚本。
+
+### 架构
+
+```
+AI 助手 (Claude / WorkBuddy)
+    ← MCP 协议（stdio 或 SSE）→
+mcp_server.py（系统 Python 3.10+）
+    ← HTTP →
+ALAS REST API（http://127.0.0.1:22267）
+    ← 内部调用 →
+ALAS 实例（调度器 + 模拟器）
+```
+
+### 快速开始
+
+**1. 启动 ALAS WebUI（提供 REST API）**
+
+```bash
+# 双击 ALAS.bat，或通过 ALAS Launcher 启动
+# 确保 http://127.0.0.1:22267 可访问
+```
+
+**2. 启动 MCP Server**
+
+```bash
+# 方式 A：stdio 传输（本地 AI 助手直连）
+python mcp_server.py
+
+# 方式 B：SSE 传输（远程 / 手机访问）
+python mcp_server.py --transport sse --port 8080
+```
+
+**3. 配置 AI 助手连接 MCP Server**
+
+Claude Desktop（`claude_desktop_config.json`）：
+
+```json
+{
+  "mcpServers": {
+    "alas": {
+      "command": "python",
+      "args": ["E:\\AzurLaneAutoScript\\mcp_server.py"],
+      "env": {
+        "ALAS_API_BASE": "http://127.0.0.1:22267"
+      }
+    }
+  }
+}
+```
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `ALAS_API_BASE` | `http://127.0.0.1:22267` | ALAS REST API 地址 |
+| `ALAS_API_KEY` | （空） | 预留，未来用于鉴权 |
+
+### MCP Tools（11 个）
+
+| 工具名 | 说明 |
+|--------|------|
+| `alas_list_instances` | 列出所有 ALAS 实例（配置组别） |
+| `alas_get_config` | 获取指定实例的完整配置 |
+| `alas_update_config` | 修改实例配置项 |
+| `alas_get_status` | 获取实例运行状态（是否存活、PID） |
+| `alas_get_log` | 获取实例最近日志 |
+| `alas_screenshot` | 对模拟器截图，返回截图路径 |
+| `alas_start` | 启动指定实例（开始调度循环） |
+| `alas_stop` | 停止指定实例（优雅退出） |
+| `alas_run_task` | 让实例运行一次指定任务 |
+| `alas_check_update` | 检查 ALAS 是否有可用更新 |
+| `alas_perform_update` | 执行 ALAS 自更新（git pull + pip install） |
+
+---
+
+## ALAS Launcher（系统托盘管理器）
+
+`alas_launcher.exe` 是一个 Windows 系统托盘程序，管理 ALAS + MCP Server 的完整生命周期，**开机自启**，无需手动操作。
+
+### 功能
+
+- 开机自动启动（注册表 `HKCU\...\Run`）
+- 系统托盘图标，右键菜单：
+  - **重启 ALAS** — 重启游戏脚本
+  - **重启 MCP Server** — 重启 AI 控制接口
+  - **打开 WebUI** — 浏览器打开 ALAS 控制台
+  - **打开日志目录** — 快速查看运行日志
+  - **退出** — 停止所有子进程并退出
+- 启动顺序：MCP Server → ALAS.bat（WebUI）→ 自动启动模拟器和游戏
+- 路径自适应：作为 exe 运行时自动识别所在目录，无需配置
+
+### 使用方法
+
+```bash
+# 开发模式（直接运行脚本）
+python alas_launcher.py
+
+# 生产模式（运行打包好的 exe）
+E:\AzurLaneAutoScript\alas_launcher.exe
+```
+
+### 打包为 exe
+
+```bash
+pip install pyinstaller pystray Pillow
+python -m PyInstaller --onefile --noconsole --name alas_launcher alas_launcher.py
+# 输出：dist/alas_launcher.exe → 复制到 ALAS 根目录
+```
+
+### 开机自启配置
+
+Launcher 首次运行时会自动在注册表创建开机自启项：
+
+```
+HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+  ALAS_Launcher = "E:\AzurLaneAutoScript\alas_launcher.exe"
+```
+
+手动配置（PowerShell）：
+
+```powershell
+New-ItemProperty `
+  -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" `
+  -Name "ALAS_Launcher" `
+  -Value "E:\AzurLaneAutoScript\alas_launcher.exe" `
+  -PropertyType String -Force
+```
+
+### 完整运转流程
+
+```
+Windows 开机
+  → alas_launcher.exe（系统托盘图标自动出现）
+      → 启动 MCP Server（后台，AI 可连接）
+      → 启动 ALAS.bat（WebUI 在 22267 端口）
+          → ALAS 自动启动模拟器
+          → 打开游戏
+          → 启动调度器（按配置自动运行任务）
+              ← AI 通过 MCP 实时控制（启停 / 改配置 / 查日志 / 截图）
+```
+
+---
+
 ## 文档 Documents
 
 [海图识别 perspective](https://github.com/LmeSzinc/AzurLaneAutoScript/wiki/perspective)
