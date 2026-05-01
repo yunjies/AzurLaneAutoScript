@@ -43,21 +43,21 @@ TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 # HTTP helpers
 # ---------------------------------------------------------------------------
 async def api_get(path: str) -> dict:
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True) as client:
         r = await client.get(f"{ALAS_API_BASE}{path}")
         r.raise_for_status()
         return r.json()
 
 
 async def api_put(path: str, body: dict) -> dict:
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True) as client:
         r = await client.put(f"{ALAS_API_BASE}{path}", json=body)
         r.raise_for_status()
         return r.json()
 
 
 async def api_post(path: str, body: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True) as client:
         r = await client.post(f"{ALAS_API_BASE}{path}", json=body)
         r.raise_for_status()
         return r.json()
@@ -175,7 +175,7 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "alas_list_instances":
-            data = await api_get("/api/instances")
+            data = await api_get("/api/instances/")
             instances = data.get("instances", [])
             if not instances:
                 return [TextContent(type="text", text="没有找到实例。")]
