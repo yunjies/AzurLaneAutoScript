@@ -80,6 +80,30 @@ def asgi_app(
     except Exception as e:
         import logging
         logging.getLogger("alas.api").warning(f"Failed to mount API router: {e}")
+    # Mount MCP SSE endpoint under /mcp
+    try:
+        from module.mcp.server import mcp_server
+        from mcp.server.sse import SseServerTransport
+        from starlette.requests import Request
+        from starlette.routing import Route
+
+        _mcp_sse = SseServerTransport("/mcp/messages/")
+
+        async def mcp_sse_handler(request: Request):
+            async with _mcp_sse.connect_sse(
+                request.scope, request.receive, request.send
+            ) as (read_stream, write_stream):
+                await mcp_server.run(
+                    read_stream,
+                    write_stream,
+                    mcp_server.create_initialization_options(),
+                )
+
+        routes.append(Route("/mcp/sse", endpoint=mcp_sse_handler))
+        routes.append(Mount("/mcp/messages", app=_mcp_sse.handle_post_message))
+    except Exception as e:
+        import logging
+        logging.getLogger("alas.mcp").warning(f"Failed to mount MCP SSE: {e}")
     middleware = [Middleware(HeaderMiddleware), Middleware(CORSMiddleware)]
     # Starlette 1.0+ removed on_startup/on_shutdown, use lifespan instead
     on_startup = starlette_settings.pop("on_startup", None)
