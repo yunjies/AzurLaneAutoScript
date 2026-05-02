@@ -18,5 +18,9 @@ python -m deploy.installer
 if %errorlevel% neq 0 (
     pause >nul
 ) else (
-    start "Alas" "%_root%\toolkit\webapp\alas.exe"
+    if exist "%_root%\toolkit\AlasTray\AlasTray.exe" (
+        start "Alas" "%_root%\toolkit\AlasTray\AlasTray.exe"
+    ) else (
+        start "Alas" "%_root%\toolkit\webapp\alas.exe"
+    )
 )
