@@ -151,6 +151,17 @@ class AlasGUI(Frame):
             ],
             onclick=[lambda: go_app("manage", new_window=False)],
         )
+        put_icon_buttons(
+            Icon.DEVELOP,
+            buttons=[
+                {
+                    "label": "MCP",
+                    "value": "MCP",
+                    "color": "aside",
+                }
+            ],
+            onclick=[lambda: go_app("mcp", new_window=False)],
+        )
 
 
     @use_scope("aside_instance")
@@ -1426,6 +1437,111 @@ def app_manage():
     _show_table()
 
 
+def app_mcp():
+    """MCP Server settings and status page."""
+    set_env(title="Alas - MCP", output_animation=False)
+    run_js("$('head').append('<style>.footer{display:none}</style>')")
+
+    # Check MCP availability
+    mcp_available = False
+    mcp_tools = []
+    try:
+        from module.mcp.tools import TOOL_MAP
+        mcp_available = True
+        mcp_tools = list(TOOL_MAP.keys())
+    except Exception:
+        pass
+
+    # Check SSE endpoint
+    sse_available = mcp_available
+
+    put_html("<h2>MCP Server</h2>")
+
+    # Status cards
+    status_color = "success" if mcp_available else "warning"
+    status_text = "Running" if mcp_available else "Not Available"
+    put_markdown(
+        f"""
+        | Item | Status |
+        |------|--------|
+        | MCP Server | <span style='color:{"green" if mcp_available else "orange"}'>{status_text}</span> |
+        | SSE Endpoint | `http://<host>:22267/mcp/sse` |
+        | stdio Transport | `python -m module.mcp.stdio` |
+        | Tools Count | {len(mcp_tools)} |
+        """
+    )
+
+    put_markdown("---")
+    put_markdown("### Available Tools")
+
+    if mcp_tools:
+        tool_rows = []
+        for name in mcp_tools:
+            desc = {
+                "alas_get_instances": "Get all ALAS instances status",
+                "alas_start_instance": "Start a specific instance",
+                "alas_run_task": "Run a task on an instance",
+                "alas_get_screenshot": "Capture current screen",
+                "alas_get_config": "Read instance config",
+                "alas_set_config": "Write instance config",
+                "alas_get_status": "Get instance running status",
+                "alas_get_logs": "Get recent logs",
+                "alas_stop_instance": "Stop a specific instance",
+                "alas_reload_config": "Reload config from disk",
+                "alas_update_check": "Check for ALAS updates",
+            }.get(name, "")
+            tool_rows.append((name, desc))
+        put_table(tool_rows, header=["Tool Name", "Description"])
+    else:
+        put_warning("MCP tools not available. Make sure `mcp` package is installed.")
+
+    put_markdown("---")
+    put_markdown("### Configuration Guide")
+    put_markdown(
+        """
+        #### WorkBuddy (Local)
+        Add to `~/.workbuddy/mcp.json`:
+        ```json
+        {
+          "mcpServers": {
+            "alas": {
+              "command": "E:\\\\AzurLaneAutoScript\\\\.venv\\\\Scripts\\\\python.exe",
+              "args": ["-m", "module.mcp.stdio"],
+              "cwd": "E:\\\\AzurLaneAutoScript"
+            }
+          }
+        }
+        ```
+
+        #### Claude Desktop (Local)
+        Add to `claude_desktop_config.json`:
+        ```json
+        {
+          "mcpServers": {
+            "alas": {
+              "command": "E:\\\\AzurLaneAutoScript\\\\.venv\\\\Scripts\\\\python.exe",
+              "args": ["-m", "module.mcp.stdio"],
+              "cwd": "E:\\\\AzurLaneAutoScript"
+            }
+          }
+        }
+        ```
+
+        #### Remote Access (SSE)
+        For Hermes or other remote AI tools, connect to:
+        ```
+        http://<your-pc-ip>:22267/mcp/sse
+        ```
+        Make sure Windows Firewall allows port 22267.
+        """
+    )
+
+    put_buttons(
+        buttons=[{"label": t("Gui.AppManage.Back"), "value": "back"}],
+        onclick=[partial(go_app, "index", new_window=False)],
+    )
+
+
 def debug():
     """For interactive python.
     $ python3
@@ -1532,8 +1648,16 @@ def app():
             return
         app_manage()
 
+    def mcp():
+        if key is not None and not login(key):
+            logger.warning(f"{info.user_ip} login failed.")
+            time.sleep(1.5)
+            run_js("location.reload();")
+            return
+        app_mcp()
+
     app = asgi_app(
-        applications=[index, manage],
+        applications=[index, manage, mcp],
         cdn=cdn,
         static_dir=None,
         debug=True,
