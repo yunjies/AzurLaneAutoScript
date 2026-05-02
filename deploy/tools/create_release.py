@@ -21,42 +21,41 @@ from pathlib import Path
 OWNER = "yunjies"
 REPO = "AzurLaneAutoScript"
 TAG = "v0.1.0"
-RELEASE_NAME = "v0.1.0 — AlasTray + MCP Server"
+RELEASE_NAME = "v0.1.0 — Alas + MCP Server"
 RELEASE_BODY = """## What's New
 
-### AlasTray — Windows System Tray Wrapper
-- Auto-starts Electron WebUI on launch
+### Alas — Windows System Tray + Launcher
+- Single `Alas.exe` — runs installer, starts WebUI, shows system tray
 - Right-click menu: Open / Restart WebUI, Open Config Folder, Exit
 - Graceful WebUI process cleanup on exit
-- Backward compatible: falls back to original webapp if AlasTray missing
+- File-based logging (`log/alas_tray.log`)
+- No console window — uses MessageBox for critical errors
 
 ### MCP Server Integration
 - 11 MCP tools for AI control (instances, tasks, config, screenshots, logs)
 - **stdio transport** for local AI (WorkBuddy, Claude Desktop, Cursor)
 - **SSE transport** for remote/web access at `/mcp/sse`
 
-### PyInstaller-based Launcher
-- Replaces legacy Bat-To-Exe Converter
-- Smaller and maintainable (7.9MB)
+### MCP Settings Page (WebUI)
+- New "MCP" sidebar button
+- Shows server status, available tools, and configuration guides
+- Supports WorkBuddy, Claude Desktop, and SSE remote access
 
 ## Build
 ```batch
 .venv\\Scripts\\python.exe deploy\\tray\\build.py
-.venv\\Scripts\\python.exe deploy\\launcher\\build.py
 ```
 
 ## Assets
 | File | Description |
 |------|-------------|
-| `Alas.exe` | New PyInstaller launcher |
-| `AlasTray.exe` | System tray manager |
+| `Alas.exe` | Single entry point: installer + WebUI + tray |
 
 Full changelog: [CHANGELOG.md](https://github.com/yunjies/AzurLaneAutoScript/blob/master/CHANGELOG.md)
 """
 
 ASSETS = [
     ("Alas.exe", Path("Alas.exe")),
-    ("AlasTray.exe", Path("toolkit/AlasTray/AlasTray.exe")),
 ]
 
 

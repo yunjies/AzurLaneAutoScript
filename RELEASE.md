@@ -9,8 +9,8 @@ set GITHUB_TOKEN=ghp_xxxxxxxxxxxx
 ```
 
 That's it. The script will:
-1. Create release `v0.1.0` on GitHub
-2. Upload `Alas.exe` and `AlasTray.exe` as assets
+1. Create release on GitHub
+2. Upload `Alas.exe` as asset
 3. Print the release URL
 
 ## Prerequisites
@@ -18,7 +18,6 @@ That's it. The script will:
 1. **Push commits first**:
    ```batch
    git push origin master
-   git push origin v0.1.0
    ```
 
 2. **Get a GitHub token**:
@@ -33,7 +32,7 @@ If you prefer the web interface:
 
 1. Visit https://github.com/yunjies/AzurLaneAutoScript/releases/new
 2. Tag: `v0.1.0`
-3. Title: `v0.1.0 — AlasTray + MCP Server`
+3. Title: `v0.1.0 — Alas + MCP Server`
 4. Body: copy from `CHANGELOG.md`
-5. Upload `Alas.exe` and `toolkit/AlasTray/AlasTray.exe`
+5. Upload `Alas.exe`
 6. Click "Publish release"

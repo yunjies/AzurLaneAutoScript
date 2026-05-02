@@ -1,10 +1,10 @@
-# AlasTray
+# Alas — Launcher + System Tray
 
 **All-in-one launcher + system tray for AzurLaneAutoScript.**
 
 ## What is this?
 
-`AlasTray.exe` is the **single entry point** for ALAS.
+`Alas.exe` is the **single entry point** for ALAS.
 
 1. Double-click → runs `deploy.installer` (git update, pip install)
 2. Installer success → starts Electron WebUI automatically
@@ -14,9 +14,9 @@
 
 | File | Purpose |
 |------|---------|
-| `tray.py` | Tray application source (includes launcher logic) |
+| `tray.py` | Main application source (installer + WebUI + tray) |
 | `build.py` | PyInstaller build script |
-| `../../AlasTray.exe` | Built artifact (place in ALAS root) |
+| `../../Alas.exe` | Built artifact (in ALAS root) |
 
 ## Build
 
@@ -25,13 +25,13 @@ cd E:\AzurLaneAutoScript
 .venv\Scripts\python.exe deploy\tray\build.py
 ```
 
-Output: `AlasTray.exe` (in ALAS root directory)
+Output: `Alas.exe` (in ALAS root directory)
 
 ## Usage
 
 ```batch
-:: Method 1: Double-click AlasTray.exe
-:: Method 2: Run Alas.bat (launches AlasTray.exe)
+:: Method 1: Double-click Alas.exe
+:: Method 2: Run Alas.bat (launches Alas.exe)
 ```
 
 ## Tray Menu
@@ -41,12 +41,18 @@ Output: `AlasTray.exe` (in ALAS root directory)
 - **Open Config Folder** — open `config/` in Explorer
 - **Exit** — stop WebUI and close tray
 
+## Important Notes
+
+- Built with `--windowed` flag (no console window). **Never use `input()` or
+  `print()` expecting user to see it** — use `_show_error()` (MessageBox) for
+  critical errors and `_log()` (file log) for diagnostics.
+
 ## Architecture
 
 ```
-User double-clicks AlasTray.exe
+User double-clicks Alas.exe
     ↓
-AlasTray runs deploy.installer
+Alas runs deploy.installer
     ↓
 On success: starts toolkit/webapp/alas.exe (Electron)
     ↓
@@ -55,4 +61,4 @@ Shows system tray icon
 Right-click menu for control
 ```
 
-No separate launcher needed — AlasTray does it all.
+No separate launcher needed — Alas.exe does it all.

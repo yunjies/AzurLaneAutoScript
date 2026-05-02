@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-AlasTray — All-in-one launcher + system tray for AzurLaneAutoScript
+Alas — All-in-one launcher + system tray for AzurLaneAutoScript
 
 Usage:
-    Double-click AlasTray.exe (or Alas.bat)
+    Double-click Alas.exe (or Alas.bat)
 
 Flow:
     1. Find ALAS root directory
@@ -11,6 +11,11 @@ Flow:
     3. Run deploy.installer (git update, pip install, adb install)
     4. Start Electron WebUI
     5. Show system tray icon (常驻)
+
+Note:
+    Built with --windowed (no console), so NEVER use input() or
+    print-to-stderr expecting user to see it.  Use ctypes.MessageBox
+    for critical errors instead.
 """
 
 import os
@@ -41,8 +46,24 @@ _lock = threading.Lock()
 
 
 def _log(msg: str):
-    """Print to stdout with prefix."""
-    print(f"[AlasTray] {msg}")
+    """Log to file; avoid stdout/stderr in windowed mode."""
+    log_path = ALAS_ROOT / "log" / "alas_tray.log"
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as f:
+            from datetime import datetime
+            f.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {msg}\n")
+    except Exception:
+        pass
+
+
+def _show_error(title: str, message: str):
+    """Show a Windows MessageBox (works in --windowed mode)."""
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)  # MB_ICONERROR
+    except Exception:
+        pass
 
 
 def _setup_env() -> dict:
@@ -205,13 +226,15 @@ def _load_icon() -> Image.Image:
 # Main entry
 # ---------------------------------------------------------------------------
 def main():
-    _log("AlasTray starting...")
+    _log("Alas starting...")
     _log(f"ALAS_ROOT: {ALAS_ROOT}")
 
     # Step 1: Run installer (update check, pip install, etc.)
     if not run_installer():
-        _log("AlasTray cannot continue due to installer failure.")
-        input("Press Enter to exit...")
+        _log("Alas cannot continue due to installer failure.")
+        _show_error("Alas - Installer Failed",
+                     "The ALAS installer failed to complete.\n"
+                     "Check log/alas_tray.log for details.")
         sys.exit(1)
 
     # Step 2: Start WebUI
@@ -219,7 +242,7 @@ def main():
 
     # Step 3: Show tray icon
     icon = pystray.Icon(
-        "AlasTray",
+        "Alas",
         icon=_load_icon(),
         title="AzurLaneAutoScript",
         menu=pystray.Menu(
@@ -233,7 +256,7 @@ def main():
 
     _log("Tray icon ready.")
     icon.run()
-    _log("AlasTray exited.")
+    _log("Alas exited.")
 
 
 if __name__ == "__main__":

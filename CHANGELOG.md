@@ -1,14 +1,16 @@
 # Changelog
 
-## v0.1.0 — AlasTray + MCP Server (2026-05-02)
+## v0.1.0 — Alas + MCP Server (2026-05-02)
 
 ### New Features
 
-#### AlasTray — All-in-One Launcher + System Tray
-- Single `AlasTray.exe` replaces both legacy launcher and separate tray app
+#### Alas — All-in-One Launcher + System Tray
+- Single `Alas.exe` replaces both legacy launcher and separate tray app
 - Double-click → runs `deploy.installer` → starts WebUI → shows tray icon
 - Right-click menu: Open WebUI / Restart WebUI / Open Config Folder / Exit
 - Graceful WebUI process cleanup on exit
+- File-based logging (`log/alas_tray.log`) — no console dependency
+- Windows MessageBox for critical errors (works in `--windowed` mode)
 - Source: `deploy/tray/tray.py`, Build: `deploy/tray/build.py`
 
 #### MCP Server Integration (Phase 2)
@@ -21,18 +23,23 @@
 - **SSE transport** — remote/web access via `http://<ip>:22267/mcp/sse`
 - Mounted on existing FastAPI server in `module/webui/fastapi.py`
 
+#### MCP Settings Page (WebUI)
+- New "MCP" sidebar button in WebUI
+- Shows MCP server status, available tools, and configuration guides
+- Supports WorkBuddy, Claude Desktop, and SSE remote access instructions
+
 ### Changes
 
-- `deploy/launcher/Alas.bat` — simplified to launch `AlasTray.exe` directly
+- `deploy/launcher/Alas.bat` — simplified to launch `Alas.exe` directly
 - Removed legacy launcher code (`alas_launcher.py`, `mcp_server.py`)
-- Removed separate launcher/build scripts (`deploy/launcher/launcher.py`, `build.py`)
+- Removed separate launcher/build scripts
 - Restored Docker files to upstream versions
 
 ### Build Artifacts
 
 | File | Size | Description |
 |------|------|-------------|
-| `AlasTray.exe` | ~27 MB | Single entry point: installer + WebUI + tray |
+| `Alas.exe` | ~27 MB | Single entry point: installer + WebUI + tray |
 
 ### Dependencies Added
 
@@ -51,8 +58,8 @@
 ```batch
 cd E:\AzurLaneAutoScript
 
-:: Build AlasTray.exe (single entry point)
+:: Build Alas.exe (single entry point)
 .venv\Scripts\python.exe deploy\tray\build.py
 ```
 
-Output: `AlasTray.exe` in ALAS root directory.
+Output: `Alas.exe` in ALAS root directory.

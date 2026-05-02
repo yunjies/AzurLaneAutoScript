@@ -7,12 +7,12 @@ cd "%_root%"
 
 color F0
 
-:: AlasTray is the single entry point — it runs installer internally
+:: Alas.exe is the single entry point — it runs installer internally
 :: and then starts WebUI + system tray.
-if exist "%_root%\AlasTray.exe" (
-    start "Alas" "%_root%\AlasTray.exe"
+if exist "%_root%\Alas.exe" (
+    start "Alas" "%_root%\Alas.exe"
 ) else (
-    echo ERROR: AlasTray.exe not found. Please build it first:
+    echo ERROR: Alas.exe not found. Please build it first:
     echo   .venv\Scripts\python.exe deploy\tray\build.py
     pause >nul
 )
