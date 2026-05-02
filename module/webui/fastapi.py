@@ -3,7 +3,6 @@ Copy from pywebio.platform.fastapi
 """
 import asyncio
 import os
-from contextlib import asynccontextmanager
 
 import uvicorn
 from pywebio.platform.fastapi import (STATIC_PATH, Session, cdn_validation,
@@ -105,29 +104,17 @@ def asgi_app(
         import logging
         logging.getLogger("alas.mcp").warning(f"Failed to mount MCP SSE: {e}")
     middleware = [Middleware(HeaderMiddleware), Middleware(CORSMiddleware)]
-    # Starlette 1.0+ removed on_startup/on_shutdown, use lifespan instead
+    # Extract on_startup/on_shutdown from **starlette_settings
+    # (they're passed as kwargs from callers but not in our explicit params).
+    # Use on_startup/on_shutdown directly — starlette 0.14.x does not support
+    # @asynccontextmanager as a lifespan parameter (it iterates with `for item
+    # in self.lifespan_context(app)` which fails on _AsyncGeneratorContextManager).
     on_startup = starlette_settings.pop("on_startup", None)
     on_shutdown = starlette_settings.pop("on_shutdown", None)
-
-    @asynccontextmanager
-    async def lifespan(app):
-        if on_startup:
-            for func in on_startup:
-                if asyncio.iscoroutinefunction(func):
-                    await func()
-                else:
-                    func()
-        yield
-        if on_shutdown:
-            for func in on_shutdown:
-                if asyncio.iscoroutinefunction(func):
-                    await func()
-                else:
-                    func()
-
     return Starlette(
         routes=routes, middleware=middleware, debug=debug,
-        lifespan=lifespan, **starlette_settings
+        on_startup=on_startup, on_shutdown=on_shutdown,
+        **starlette_settings
     )
 
 
