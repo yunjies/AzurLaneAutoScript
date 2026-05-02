@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Build script for AlasTray.exe
+Build script for AlasTray.exe — the single entry point for ALAS.
 
 Usage:
     cd E:\AzurLaneAutoScript
     .venv\Scripts\python.exe deploy\tray\build.py
 
 Output:
-    toolkit/AlasTray/AlasTray.exe
+    AlasTray.exe (in ALAS root directory)
 """
 
 import subprocess
@@ -18,7 +18,7 @@ TRAY_DIR = Path(__file__).parent.resolve()
 ALAS_ROOT = TRAY_DIR.parent.parent.resolve()
 ICON_PATH = ALAS_ROOT / "deploy" / "launcher" / "icon.ico"
 TRAY_PY = TRAY_DIR / "tray.py"
-OUTPUT_DIR = ALAS_ROOT / "toolkit" / "AlasTray"
+OUTPUT_DIR = ALAS_ROOT  # Place AlasTray.exe directly in ALAS root
 
 PYTHON_EXE = ALAS_ROOT / ".venv" / "Scripts" / "python.exe"
 
@@ -42,8 +42,8 @@ def main():
         "--name", "AlasTray",
         "--icon", str(ICON_PATH),
         "--distpath", str(OUTPUT_DIR),
-        "--workpath", str(OUTPUT_DIR / "build"),
-        "--specpath", str(OUTPUT_DIR),
+        "--workpath", str(ALAS_ROOT / "toolkit" / "AlasTray_build"),
+        "--specpath", str(ALAS_ROOT / "toolkit" / "AlasTray_build"),
         str(TRAY_PY),
     ]
 
@@ -57,6 +57,7 @@ def main():
     exe_path = OUTPUT_DIR / "AlasTray.exe"
     if exe_path.exists():
         print(f"\nSUCCESS: {exe_path}")
+        print("Double-click AlasTray.exe to launch ALAS with system tray.")
     else:
         print(f"\nWARNING: Expected output not found at {exe_path}")
 

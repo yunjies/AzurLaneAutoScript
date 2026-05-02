@@ -4,23 +4,15 @@
 set "_root=%~dp0"
 set "_root=%_root:~0,-1%"
 cd "%_root%"
-echo "%_root%
 
 color F0
 
-set "_pyBin=%_root%\toolkit"
-set "_GitBin=%_root%\toolkit\Git\mingw64\bin"
-set "_adbBin=%_root%\toolkit\Lib\site-packages\adbutils\binaries"
-set "PATH=%_root%\toolkit\alias;%_root%\toolkit\command;%_pyBin%;%_pyBin%\Scripts;%_GitBin%;%_adbBin%;%PATH%"
-
-title Alas Updater
-python -m deploy.installer
-if %errorlevel% neq 0 (
-    pause >nul
+:: AlasTray is the single entry point — it runs installer internally
+:: and then starts WebUI + system tray.
+if exist "%_root%\AlasTray.exe" (
+    start "Alas" "%_root%\AlasTray.exe"
 ) else (
-    if exist "%_root%\toolkit\AlasTray\AlasTray.exe" (
-        start "Alas" "%_root%\toolkit\AlasTray\AlasTray.exe"
-    ) else (
-        start "Alas" "%_root%\toolkit\webapp\alas.exe"
-    )
+    echo ERROR: AlasTray.exe not found. Please build it first:
+    echo   .venv\Scripts\python.exe deploy\tray\build.py
+    pause >nul
 )

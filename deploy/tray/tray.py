@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 """
-AlasTray - System tray wrapper for AzurLaneAutoScript
-Provides a常驻托盘图标 to manage the ALAS WebUI (Electron) process.
+AlasTray — All-in-one launcher + system tray for AzurLaneAutoScript
+
+Usage:
+    Double-click AlasTray.exe (or Alas.bat)
+
+Flow:
+    1. Find ALAS root directory
+    2. Set up PATH (toolkit, Git, adb, etc.)
+    3. Run deploy.installer (git update, pip install, adb install)
+    4. Start Electron WebUI
+    5. Show system tray icon (常驻)
 """
 
 import os
-import sys
-import time
 import subprocess
+import sys
 import threading
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -36,6 +45,49 @@ def _log(msg: str):
     print(f"[AlasTray] {msg}")
 
 
+def _setup_env() -> dict:
+    """Build PATH env var exactly like Alas.bat does."""
+    toolkit = ALAS_ROOT / "toolkit"
+    paths = [
+        toolkit / "alias",
+        toolkit / "command",
+        toolkit,
+        toolkit / "Scripts",
+        toolkit / "Git" / "mingw64" / "bin",
+        toolkit / "Lib" / "site-packages" / "adbutils" / "binaries",
+    ]
+    valid_paths = [str(p) for p in paths if p.exists()]
+    env = os.environ.copy()
+    env["PATH"] = ";".join(valid_paths) + ";" + env.get("PATH", "")
+    return env
+
+
+def _find_python(env: dict) -> str:
+    """Find the Python executable."""
+    toolkit_python = ALAS_ROOT / "toolkit" / "python.exe"
+    if toolkit_python.exists():
+        return str(toolkit_python)
+    return "python"
+
+
+def run_installer() -> bool:
+    """Run deploy.installer. Returns True on success."""
+    env = _setup_env()
+    python_exe = _find_python(env)
+
+    _log("Running installer...")
+    result = subprocess.run(
+        [python_exe, "-m", "deploy.installer"],
+        cwd=str(ALAS_ROOT),
+        env=env,
+    )
+    if result.returncode != 0:
+        _log("Installer failed.")
+        return False
+    _log("Installer completed.")
+    return True
+
+
 def _is_webui_running() -> bool:
     """Check if the WebUI process is still alive."""
     global _webui_proc
@@ -55,8 +107,6 @@ def start_webui():
             _log(f"ERROR: WebUI not found at {WEBAPP_PATH}")
             return
         _log(f"Starting WebUI: {WEBAPP_PATH}")
-        # Use DETACHED_PROCESS on Windows so closing tray doesn't auto-kill webui
-        # But we still want to track it for explicit restart/exit
         kwargs = {}
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -79,13 +129,10 @@ def stop_webui():
         _log(f"Stopping WebUI (pid={_webui_proc.pid})...")
         try:
             if sys.platform == "win32":
-                # Send CTRL_BREAK_EVENT to the process group
                 import signal
-
                 os.kill(_webui_proc.pid, signal.CTRL_BREAK_EVENT)
             else:
                 _webui_proc.terminate()
-            # Wait a bit, then kill if still alive
             try:
                 _webui_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
@@ -150,18 +197,27 @@ def on_exit(icon, item):
 def _load_icon() -> Image.Image:
     if ICON_PATH.exists():
         return Image.open(ICON_PATH)
-    # Fallback: generate a simple icon
     img = Image.new("RGBA", (64, 64), (0, 120, 212, 255))
     return img
 
 
+# ---------------------------------------------------------------------------
+# Main entry
+# ---------------------------------------------------------------------------
 def main():
     _log("AlasTray starting...")
     _log(f"ALAS_ROOT: {ALAS_ROOT}")
 
-    # Auto-start WebUI on tray launch
-    threading.Thread(target=start_webui, daemon=True).start()
+    # Step 1: Run installer (update check, pip install, etc.)
+    if not run_installer():
+        _log("AlasTray cannot continue due to installer failure.")
+        input("Press Enter to exit...")
+        sys.exit(1)
 
+    # Step 2: Start WebUI
+    start_webui()
+
+    # Step 3: Show tray icon
     icon = pystray.Icon(
         "AlasTray",
         icon=_load_icon(),

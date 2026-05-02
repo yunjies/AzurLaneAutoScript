@@ -4,17 +4,12 @@
 
 ### New Features
 
-#### AlasTray — Windows System Tray Wrapper
-- New `deploy/tray/tray.py` — system tray application using **pystray**
-- Auto-starts Electron WebUI when tray launches
+#### AlasTray — All-in-One Launcher + System Tray
+- Single `AlasTray.exe` replaces both legacy launcher and separate tray app
+- Double-click → runs `deploy.installer` → starts WebUI → shows tray icon
 - Right-click menu: Open WebUI / Restart WebUI / Open Config Folder / Exit
 - Graceful WebUI process cleanup on exit
-- Backward compatible: falls back to original `webapp/alas.exe` if AlasTray missing
-
-#### PyInstaller-based Launcher
-- New `deploy/launcher/launcher.py` — Python-based launcher replacing legacy **Bat-To-Exe Converter**
-- New `deploy/launcher/build.py` — PyInstaller build script for `Alas.exe`
-- Smaller, more maintainable launcher (7.9MB vs legacy wrapper)
+- Source: `deploy/tray/tray.py`, Build: `deploy/tray/build.py`
 
 #### MCP Server Integration (Phase 2)
 - New `module/mcp/` package with 11 MCP tools
@@ -28,16 +23,16 @@
 
 ### Changes
 
-- `deploy/launcher/Alas.bat` — now prefers `AlasTray.exe` if available, otherwise falls back to `webapp/alas.exe`
-- Removed legacy launcher code (`deploy/launcher/alas_launcher.py`, `mcp_server.py`)
+- `deploy/launcher/Alas.bat` — simplified to launch `AlasTray.exe` directly
+- Removed legacy launcher code (`alas_launcher.py`, `mcp_server.py`)
+- Removed separate launcher/build scripts (`deploy/launcher/launcher.py`, `build.py`)
 - Restored Docker files to upstream versions
 
 ### Build Artifacts
 
 | File | Size | Description |
 |------|------|-------------|
-| `Alas.exe` | 7.9 MB | New PyInstaller launcher |
-| `toolkit/AlasTray/AlasTray.exe` | 27 MB | System tray manager |
+| `AlasTray.exe` | ~27 MB | Single entry point: installer + WebUI + tray |
 
 ### Dependencies Added
 
@@ -56,9 +51,8 @@
 ```batch
 cd E:\AzurLaneAutoScript
 
-:: Build AlasTray.exe
+:: Build AlasTray.exe (single entry point)
 .venv\Scripts\python.exe deploy\tray\build.py
-
-:: Build Alas.exe (new launcher)
-.venv\Scripts\python.exe deploy\launcher\build.py
 ```
+
+Output: `AlasTray.exe` in ALAS root directory.
