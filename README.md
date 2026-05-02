@@ -133,15 +133,15 @@ GUI development, thanks **[@18870](https://github.com/18870)** , say HURRAY.
 
 ## AI 控制接口（MCP Server）
 
-ALAS 支持通过 MCP（Model Context Protocol）被 AI 助手（如 Claude、WorkBuddy）控制，实现自然语言操控游戏脚本。
+ALAS 支持通过 MCP（Model Context Protocol）被 AI 助手控制，实现自然语言操控游戏脚本。MCP Server 内嵌在 ALAS WebUI 中，无需额外启动。
 
 ### 架构
 
 ```
-AI 助手 (Claude / WorkBuddy)
+AI 助手 (WorkBuddy / Claude Desktop / Cursor)
     ← MCP 协议（stdio 或 SSE）→
-mcp_server.py（系统 Python 3.10+）
-    ← HTTP →
+ALAS MCP Server（内嵌于 WebUI，module/mcp/）
+    ← 内部调用 →
 ALAS REST API（http://127.0.0.1:22267）
     ← 内部调用 →
 ALAS 实例（调度器 + 模拟器）
@@ -149,24 +149,27 @@ ALAS 实例（调度器 + 模拟器）
 
 ### 快速开始
 
-**1. 启动 ALAS WebUI（提供 REST API）**
+**1. 启动 ALAS（提供 WebUI + MCP Server）**
 
 ```bash
-# 双击 ALAS.bat，或通过 ALAS Launcher 启动
-# 确保 http://127.0.0.1:22267 可访问
+# 双击 Alas.exe，或运行 deploy/launcher/Alas.bat
+# WebUI 启动后，MCP Server 自动就绪
+# SSE 端点：http://127.0.0.1:22267/mcp/sse
 ```
 
-**2. 启动 MCP Server**
+**2. 配置 AI 助手连接**
 
-```bash
-# 方式 A：stdio 传输（本地 AI 助手直连）
-python mcp_server.py
+WorkBuddy（`~/.workbuddy/mcp.json`）：
 
-# 方式 B：SSE 传输（远程 / 手机访问）
-python mcp_server.py --transport sse --port 8080
+```json
+{
+  "mcpServers": {
+    "alas": {
+      "url": "http://127.0.0.1:22267/mcp/sse"
+    }
+  }
+}
 ```
-
-**3. 配置 AI 助手连接 MCP Server**
 
 Claude Desktop（`claude_desktop_config.json`）：
 
@@ -175,7 +178,8 @@ Claude Desktop（`claude_desktop_config.json`）：
   "mcpServers": {
     "alas": {
       "command": "python",
-      "args": ["E:\\AzurLaneAutoScript\\mcp_server.py"],
+      "args": ["-m", "module.mcp"],
+      "cwd": "E:\\AzurLaneAutoScript",
       "env": {
         "ALAS_API_BASE": "http://127.0.0.1:22267"
       }
@@ -184,203 +188,79 @@ Claude Desktop（`claude_desktop_config.json`）：
 }
 ```
 
-### 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `ALAS_API_BASE` | `http://127.0.0.1:22267` | ALAS REST API 地址 |
-| `ALAS_API_KEY` | （空） | 预留，未来用于鉴权 |
-
 ### MCP Tools（11 个）
 
 | 工具名 | 说明 |
 |--------|------|
-| `alas_list_instances` | 列出所有 ALAS 实例（配置组别） |
+| `alas_get_instances` | 列出所有 ALAS 实例（配置组别） |
 | `alas_get_config` | 获取指定实例的完整配置 |
-| `alas_update_config` | 修改实例配置项 |
+| `alas_set_config` | 修改实例配置项 |
 | `alas_get_status` | 获取实例运行状态（是否存活、PID） |
-| `alas_get_log` | 获取实例最近日志 |
-| `alas_screenshot` | 对模拟器截图，返回截图路径 |
-| `alas_start` | 启动指定实例（开始调度循环） |
-| `alas_stop` | 停止指定实例（优雅退出） |
+| `alas_get_logs` | 获取实例最近日志 |
+| `alas_get_screenshot` | 对模拟器截图 |
+| `alas_start_instance` | 启动指定实例（开始调度循环） |
+| `alas_stop_instance` | 停止指定实例（优雅退出） |
 | `alas_run_task` | 让实例运行一次指定任务 |
-| `alas_check_update` | 检查 ALAS 是否有可用更新 |
-| `alas_perform_update` | 执行 ALAS 自更新（git pull + pip install） |
+| `alas_update_check` | 检查 ALAS 是否有可用更新 |
+| `alas_reload_config` | 重载实例配置 |
+
+> 💡 WebUI 侧边栏有 **MCP** 按钮，可查看 MCP Server 状态和完整配置指南。
 
 ---
 
-## ALAS Launcher（系统托盘管理器）
+## Alas.exe — 一体化启动器 + 系统托盘
 
-`alas_launcher.exe` 是一个 Windows 系统托盘程序，管理 ALAS + MCP Server 的完整生命周期，**开机自启**，无需手动操作。
+`Alas.exe` 是 ALAS 的唯一入口程序，集成了以下功能：
 
-Launcher 相关文件统一放在 `deploy/launcher/` 目录，打包后的 exe 放在 ALAS 根目录。
+1. **自动更新**：启动时运行 `deploy.installer`（git pull + pip install）
+2. **WebUI 启动**：自动启动 Electron WebUI（`toolkit/webapp/alas.exe`）
+3. **系统托盘**：常驻托盘图标，右键菜单控制
 
 ### 文件结构
 
 ```
 AzurLaneAutoScript/
-├── alas_launcher.exe        # 打包后的 exe（放在根目录）
+├── Alas.exe                  # 一体化入口（双击启动）
 ├── deploy/
+│   ├── tray/
+│   │   ├── tray.py           # 源码（installer + WebUI + 托盘）
+│   │   ├── build.py          # 打包脚本 → Alas.exe
+│   │   └── README.md
 │   └── launcher/
-│       ├── alas_launcher.py  # Launcher 源码
-│       ├── icon.ico           # ALAS 图标（exe + 托盘共用）
-│       ├── Alas.bat           # ALAS 启动脚本
-│       └── Alas-gui.bat      # ALAS GUI 启动脚本
+│       ├── Alas.bat           # 备用启动入口
+│       └── icon.ico           # ALAS 图标
 └── ...
 ```
 
-### 功能
+### 系统托盘菜单
 
-- 开机自动启动（注册表 `HKCU\...\Run`）
-- 系统托盘图标，右键菜单：
-  - **重启 ALAS** — 重启游戏脚本
-  - **重启 MCP Server** — 重启 AI 控制接口
-  - **打开 WebUI** — 浏览器打开 ALAS 控制台
-  - **打开日志目录** — 快速查看运行日志
-  - **退出** — 停止所有子进程并退出
-- 启动顺序：MCP Server → ALAS.bat（WebUI）→ 自动启动模拟器和游戏
-- 路径自适应：作为 exe 运行时自动识别所在目录，无需配置
+- **Open WebUI** — 打开 ALAS 控制台（或重启 WebUI）
+- **Restart WebUI** — 重启 Electron 进程
+- **Open Config Folder** — 打开 `config/` 目录
+- **Exit** — 停止 WebUI 并退出
 
-### 使用方法
+### 构建 Alas.exe
 
-```bash
-# 开发模式（直接运行脚本）
-cd deploy/launcher
-python alas_launcher.py
-
-# 生产模式（运行打包好的 exe，放在 ALAS 根目录）
-E:\AzurLaneAutoScript\alas_launcher.exe
+```batch
+cd E:\AzurLaneAutoScript
+.venv\Scripts\python.exe deploy\tray\build.py
 ```
 
-### 打包为 exe
-
-```bash
-pip install pyinstaller pystray Pillow
-cd deploy/launcher
-python -m PyInstaller --onefile --windowed --icon icon.ico --name alas_launcher alas_launcher.py
-# 输出：dist/alas_launcher.exe → 复制到 ALAS 根目录
-```
-
-### 开机自启配置
-
-Launcher 首次运行时会自动在注册表创建开机自启项：
-
-```
-HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-  ALAS_Launcher = "E:\AzurLaneAutoScript\alas_launcher.exe"
-```
-
-手动配置（PowerShell）：
-
-```powershell
-New-ItemProperty `
-  -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" `
-  -Name "ALAS_Launcher" `
-  -Value "E:\AzurLaneAutoScript\alas_launcher.exe" `
-  -PropertyType String -Force
-```
+> ⚠️ `Alas.exe` 使用 `--windowed` 打包（无控制台），源码中禁止使用 `input()`。
+> 日志文件：`log/alas_tray.log`
 
 ### 完整运转流程
 
 ```
-Windows 开机
-  → alas_launcher.exe（系统托盘图标自动出现）
-      → 启动 MCP Server（后台，AI 可连接）
-      → 启动 ALAS.bat（WebUI 在 22267 端口）
-          → ALAS 自动启动模拟器
-          → 打开游戏
-          → 启动调度器（按配置自动运行任务）
-              ← AI 通过 MCP 实时控制（启停 / 改配置 / 查日志 / 截图）
-```
-
----
-
-## Unraid Docker 部署（MCP Server）
-
-**架构**：MCP Server 运行在 Unraid Docker 中，通过内网控制 Windows PC 上的 ALAS + 模拟器。
-
-```
-┌─────────────────┐
-│  WorkBuddy（手机/电脑）                         │
-│      ↓ MCP 协议（SSE 远程连接）                  │
-│  MCP Server（Unraid Docker）                   │
-│      ↓ HTTP REST API                           │
-│  ALAS WebUI（Windows PC :22267）              │
-│      ↓ ADB                                    │
-│  模拟器（Windows PC）                          │
-└─────────────────┘
-```
-
-### 前置条件
-
-1. **Windows PC 运行 `alas_launcher.exe`**（系统托盘常驻）
-   - Launcher 内置 HTTP API（端口 `22333`）
-   - 负责启动/停止模拟器、ALAS
-2. **ALAS WebUI 正常运行**（端口 `22267`）
-3. **Windows PC 防火墙开放端口** `22267` 和 `22333`
-
-### 部署步骤
-
-#### 1. 构建 Docker 镜像（Unraid 上操作）
-
-```bash
-# 在 Unraid 的 shell 中，进入 ALAS 仓库的 deploy/docker/ 目录
-cd /mnt/user/appdata/ALAS/AzurLaneAutoScript/deploy/docker/
-
-# 构建镜像
-docker build -t alas-mcp:latest ..
-```
-
-#### 2. 启动容器
-
-```bash
-docker run -d \
-  --name alas-mcp \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  -e ALAS_API_BASE=http://192.168.1.100:22267 \
-  -e EMULATOR_API_BASE=http://192.168.1.100:22333 \
-  alas-mcp:latest
-```
-
-> ⚠️ 将 `192.168.1.100` 替换为你的 Windows PC 的内网 IP！
-
-#### 3. 配置 WorkBuddy 连接
-
-在 WorkBuddy 的 `mcp.json` 中添加：
-
-```json
-{
-  "mcpServers": {
-    "alas": {
-      "url": "http://192.168.1.217:8080/sse"
-    }
-  }
-}
-```
-
-> `192.168.1.217` 是 Unraid 的 IP，端口 `8080` 是 MCP Server 的 SSE 端口。
-
-### 可用的 MCP 工具
-
-| 工具 | 说明 |
-|------|------|
-| `alas_list_instances` | 列出所有 ALAS 实例 |
-| `alas_get_status` | 查看 ALAS 运行状态 |
-| `alas_start` / `alas_stop` | 启动/停止 ALAS 调度 |
-| `alas_run_task` | 运行单次任务（刷图等） |
-| `alas_get_log` | 查看日志 |
-| `alas_screenshot` | 截图 |
-| `emulator_start` | 远程启动模拟器（需 Windows PC 的 Launcher） |
-| `emulator_stop` | 远程停止模拟器 |
-
-### Windows PC 端配置
-
-确保 `alas_launcher.exe` 正在运行（系统托盘有图标），且防火墙允许端口 `22333` 入站：
-
-```powershell
-# 管理员权限运行
-New-NetFirewallRule -DisplayName "ALAS Launcher API" -Direction Inbound -LocalPort 22333 -Protocol TCP -Action Allow
+用户双击 Alas.exe
+  → 运行 deploy.installer（git pull / pip install / adb install）
+  → 启动 Electron WebUI（端口 22267）
+      → ALAS 自动启动模拟器
+      → 打开游戏
+      → 启动调度器（按配置自动运行任务）
+  → 系统托盘图标常驻
+      ← 右键菜单控制（Open / Restart WebUI, Exit）
+      ← AI 通过 MCP 实时控制（启停 / 改配置 / 查日志 / 截图）
 ```
 
 ---
