@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Alas — All-in-one launcher + system tray for AzurLaneAutoScript
 
 Usage:
@@ -9,8 +9,9 @@ Flow:
     1. Find ALAS root directory
     2. Set up PATH (toolkit, Git, adb, etc.)
     3. Run deploy.installer (git update, pip install, adb install)
-    4. Start Electron WebUI
-    5. Show system tray icon (常驻)
+    4. Start Python WebUI backend (gui.py via toolkit/python.exe)
+    5. Start Electron desktop app (optional, wraps the WebUI)
+    6. Show system tray icon (常驻)
 
 Note:
     Built with --windowed (no console), so NEVER use input() or
@@ -57,7 +58,8 @@ CONFIG_DIR = ALAS_ROOT / "config"
 # ---------------------------------------------------------------------------
 # Process state
 # ---------------------------------------------------------------------------
-_webui_proc = None
+_backend_proc = None   # Python WebUI backend (gui.py)
+_electron_proc = None  # Electron desktop wrapper (optional)
 _lock = threading.Lock()
 
 
@@ -107,6 +109,21 @@ def _find_python(env: dict) -> str:
     return "python"
 
 
+def _read_webui_port() -> str:
+    """Read WebuiPort from config/deploy.yaml (default 22267)."""
+    import re
+    deploy_yaml = ALAS_ROOT / "config" / "deploy.yaml"
+    if deploy_yaml.exists():
+        try:
+            text = deploy_yaml.read_text(encoding="utf-8")
+            m = re.search(r"WebuiPort:\s*(\d+)", text)
+            if m:
+                return m.group(1)
+        except Exception:
+            pass
+    return "22267"
+
+
 def run_installer() -> bool:
     """Run deploy.installer. Returns True on success."""
     env = _setup_env()
@@ -125,72 +142,152 @@ def run_installer() -> bool:
     return True
 
 
-def _is_webui_running() -> bool:
-    """Check if the WebUI process is still alive."""
-    global _webui_proc
-    if _webui_proc is None:
+# ---------------------------------------------------------------------------
+# Python backend management
+# ---------------------------------------------------------------------------
+def _is_backend_running() -> bool:
+    """Check if the Python backend process is still alive."""
+    global _backend_proc
+    if _backend_proc is None:
         return False
-    return _webui_proc.poll() is None
+    return _backend_proc.poll() is None
 
 
-def start_webui():
-    """Start the Electron WebUI process."""
-    global _webui_proc
+def start_backend():
+    """Start the Python WebUI backend (gui.py)."""
+    global _backend_proc
     with _lock:
-        if _is_webui_running():
-            _log("WebUI is already running.")
+        if _is_backend_running():
+            _log("Backend is already running.")
             return
-        if not WEBAPP_PATH.exists():
-            _log(f"ERROR: WebUI not found at {WEBAPP_PATH}")
-            return
-        _log(f"Starting WebUI: {WEBAPP_PATH}")
-        kwargs = {}
-        if sys.platform == "win32":
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        _webui_proc = subprocess.Popen(
-            [str(WEBAPP_PATH)],
-            cwd=str(WEBAPP_PATH.parent),
+        env = _setup_env()
+        python_exe = _find_python(env)
+        port = _read_webui_port()
+
+        cmd = [python_exe, "gui.py", "--port", port]
+        _log(f"Starting backend: {' '.join(cmd)}")
+        _backend_proc = subprocess.Popen(
+            cmd,
+            cwd=str(ALAS_ROOT),
+            env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            **kwargs,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
         )
-        _log(f"WebUI started (pid={_webui_proc.pid})")
+        _log(f"Backend started (pid={_backend_proc.pid})")
 
 
-def stop_webui():
-    """Stop the Electron WebUI process."""
-    global _webui_proc
+def stop_backend():
+    """Stop the Python WebUI backend."""
+    global _backend_proc
     with _lock:
-        if _webui_proc is None:
+        if _backend_proc is None:
             return
-        _log(f"Stopping WebUI (pid={_webui_proc.pid})...")
+        _log(f"Stopping backend (pid={_backend_proc.pid})...")
         try:
-            if sys.platform == "win32":
-                import signal
-                os.kill(_webui_proc.pid, signal.CTRL_BREAK_EVENT)
-            else:
-                _webui_proc.terminate()
+            _backend_proc.terminate()
             try:
-                _webui_proc.wait(timeout=5)
+                _backend_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                _log("WebUI did not exit gracefully, forcing kill...")
-                _webui_proc.kill()
-                _webui_proc.wait()
+                _log("Backend did not exit gracefully, forcing kill...")
+                _backend_proc.kill()
+                _backend_proc.wait()
         except ProcessLookupError:
             pass
         except Exception as e:
-            _log(f"Error stopping WebUI: {e}")
+            _log(f"Error stopping backend: {e}")
         finally:
-            _webui_proc = None
-        _log("WebUI stopped.")
+            _backend_proc = None
+        _log("Backend stopped.")
+
+
+def restart_backend():
+    """Restart the Python WebUI backend."""
+    _log("Restarting backend...")
+    stop_backend()
+    time.sleep(0.5)
+    start_backend()
+
+
+# ---------------------------------------------------------------------------
+# Electron app management
+# ---------------------------------------------------------------------------
+def _is_electron_running() -> bool:
+    """Check if the Electron app process is still alive."""
+    global _electron_proc
+    if _electron_proc is None:
+        return False
+    return _electron_proc.poll() is None
+
+
+def start_electron():
+    """Start the Electron desktop wrapper (optional)."""
+    global _electron_proc
+    with _lock:
+        if _is_electron_running():
+            _log("Electron is already running.")
+            return
+        if not WEBAPP_PATH.exists():
+            _log(f"Electron app not found at {WEBAPP_PATH}, skipping.")
+            return
+        _log(f"Starting Electron: {WEBAPP_PATH}")
+        _electron_proc = subprocess.Popen(
+            [str(WEBAPP_PATH)],
+            cwd=str(ALAS_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+        )
+        _log(f"Electron started (pid={_electron_proc.pid})")
+
+
+def stop_electron():
+    """Stop the Electron desktop wrapper."""
+    global _electron_proc
+    with _lock:
+        if _electron_proc is None:
+            return
+        _log(f"Stopping Electron (pid={_electron_proc.pid})...")
+        try:
+            _electron_proc.terminate()
+            try:
+                _electron_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                _electron_proc.kill()
+                _electron_proc.wait()
+        except ProcessLookupError:
+            pass
+        except Exception as e:
+            _log(f"Error stopping Electron: {e}")
+        finally:
+            _electron_proc = None
+        _log("Electron stopped.")
+
+
+# ---------------------------------------------------------------------------
+# Convenience: start/stop everything
+# ---------------------------------------------------------------------------
+def start_webui():
+    """Start backend + Electron."""
+    start_backend()
+    # Give the backend a moment to start listening before Electron connects
+    time.sleep(2)
+    start_electron()
+
+
+def stop_webui():
+    """Stop Electron + backend."""
+    stop_electron()
+    stop_backend()
 
 
 def restart_webui():
-    """Restart the WebUI process."""
+    """Restart everything."""
     _log("Restarting WebUI...")
-    stop_webui()
-    time.sleep(0.5)
-    start_webui()
+    stop_electron()
+    restart_backend()
+    time.sleep(2)
+    start_electron()
 
 
 def open_config_folder():
@@ -207,7 +304,7 @@ def open_config_folder():
 # Tray menu handlers
 # ---------------------------------------------------------------------------
 def on_open_webui(icon, item):
-    if not _is_webui_running():
+    if not _is_backend_running():
         start_webui()
     else:
         _log("WebUI already running.")
@@ -234,8 +331,7 @@ def on_exit(icon, item):
 def _load_icon() -> Image.Image:
     if ICON_PATH.exists():
         return Image.open(ICON_PATH)
-    img = Image.new("RGBA", (64, 64), (0, 120, 212, 255))
-    return img
+    return Image.new("RGBA", (64, 64), (0, 120, 212, 255))
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +349,7 @@ def main():
                      "Check log/alas_tray.log for details.")
         sys.exit(1)
 
-    # Step 2: Start WebUI
+    # Step 2: Start WebUI (Python backend + Electron wrapper)
     start_webui()
 
     # Step 3: Show tray icon
