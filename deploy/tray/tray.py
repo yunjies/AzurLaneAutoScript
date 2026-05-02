@@ -30,10 +30,26 @@ import pystray
 
 # ---------------------------------------------------------------------------
 # Path resolution
+#
+# When running as a PyInstaller exe, __file__ points to a temp extraction
+# directory, so we CANNOT use it to find ALAS_ROOT.  Instead, we use
+# sys.executable (the path to Alas.exe itself) which lives in ALAS_ROOT.
 # ---------------------------------------------------------------------------
-TRAY_DIR = Path(__file__).parent.resolve()
-DEPLOY_DIR = TRAY_DIR.parent.resolve()
-ALAS_ROOT = DEPLOY_DIR.parent.resolve()
+def _resolve_alas_root() -> Path:
+    """Resolve ALAS root directory.
+
+    - PyInstaller exe: sys.executable = E:\\...\\Alas.exe  → parent = ALAS_ROOT
+    - Python script:   __file__ = .../deploy/tray/tray.py  → parent.parent.parent
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle — exe is in ALAS root
+        return Path(sys.executable).parent.resolve()
+    else:
+        # Running as Python script
+        return Path(__file__).parent.parent.parent.resolve()
+
+
+ALAS_ROOT = _resolve_alas_root()
 ICON_PATH = ALAS_ROOT / "deploy" / "launcher" / "icon.ico"
 WEBAPP_PATH = ALAS_ROOT / "toolkit" / "webapp" / "alas.exe"
 CONFIG_DIR = ALAS_ROOT / "config"
