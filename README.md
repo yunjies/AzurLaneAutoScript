@@ -152,7 +152,7 @@ ALAS 实例（调度器 + 模拟器）
 **1. 启动 ALAS（提供 WebUI + MCP Server）**
 
 ```bash
-# 双击 Alas.exe，或运行 deploy/launcher/Alas.bat
+# 双击 deploy/launcher/Alas.bat，或直接运行 toolkit/webapp/alas.exe
 # WebUI 启动后，MCP Server 自动就绪
 # SSE 端点：http://127.0.0.1:22267/mcp/sse
 ```
@@ -208,60 +208,20 @@ Claude Desktop（`claude_desktop_config.json`）：
 
 ---
 
-## Alas.exe — 一体化启动器 + 系统托盘
+## 架构
 
-`Alas.exe` 是 ALAS 的唯一入口程序，集成了以下功能：
-
-1. **自动更新**：启动时运行 `deploy.installer`（git pull + pip install）
-2. **WebUI 启动**：自动启动 Electron WebUI（`toolkit/webapp/alas.exe`）
-3. **系统托盘**：常驻托盘图标，右键菜单控制
-
-### 文件结构
+启动流程：
 
 ```
-AzurLaneAutoScript/
-├── Alas.exe                  # 一体化入口（双击启动）
-├── deploy/
-│   ├── tray/
-│   │   ├── tray.py           # 源码（installer + WebUI + 托盘）
-│   │   ├── build.py          # 打包脚本 → Alas.exe
-│   │   └── README.md
-│   └── launcher/
-│       ├── Alas.bat           # 备用启动入口
-│       └── icon.ico           # ALAS 图标
-└── ...
-```
-
-### 系统托盘菜单
-
-- **Open WebUI** — 打开 ALAS 控制台（或重启 WebUI）
-- **Restart WebUI** — 重启 Electron 进程
-- **Open Config Folder** — 打开 `config/` 目录
-- **Exit** — 停止 WebUI 并退出
-
-### 构建 Alas.exe
-
-```batch
-cd E:\AzurLaneAutoScript
-.venv\Scripts\python.exe deploy\tray\build.py
-```
-
-> ⚠️ `Alas.exe` 使用 `--windowed` 打包（无控制台），源码中禁止使用 `input()`。
-> 日志文件：`log/alas_tray.log`
-
-### 完整运转流程
-
-```
-用户双击 Alas.exe
+用户双击 deploy/launcher/Alas.bat（或直接运行 toolkit/webapp/alas.exe）
   → 运行 deploy.installer（git pull / pip install / adb install）
-  → 启动 Electron WebUI（端口 22267）
-      → ALAS 自动启动模拟器
-      → 打开游戏
-      → 启动调度器（按配置自动运行任务）
-  → 系统托盘图标常驻
-      ← 右键菜单控制（Open / Restart WebUI, Exit）
+  → 启动 Electron WebUI（alas.exe，端口 22267）
+      → ALAS 自动启动模拟器 → 打开游戏 → 启动调度器
+      ← Electron 自带系统托盘（Show / Hide / Exit）
       ← AI 通过 MCP 实时控制（启停 / 改配置 / 查日志 / 截图）
 ```
+
+> 💡 Electron (`toolkit/webapp/alas.exe`) 原生支持 Tray、python-shell、单实例检测和自动更新，无需额外封装。
 
 ---
 

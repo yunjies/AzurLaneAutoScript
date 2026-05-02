@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Auto-create GitHub Release with assets.
+Auto-create GitHub Release.
 
 Usage:
     cd E:\AzurLaneAutoScript
@@ -21,42 +21,27 @@ from pathlib import Path
 OWNER = "yunjies"
 REPO = "AzurLaneAutoScript"
 TAG = "v0.1.0"
-RELEASE_NAME = "v0.1.0 — Alas + MCP Server"
+RELEASE_NAME = "v0.1.0 — MCP Server Integration"
 RELEASE_BODY = """## What's New
-
-### Alas — Windows System Tray + Launcher
-- Single `Alas.exe` — runs installer, starts WebUI, shows system tray
-- Right-click menu: Open / Restart WebUI, Open Config Folder, Exit
-- Graceful WebUI process cleanup on exit
-- File-based logging (`log/alas_tray.log`)
-- No console window — uses MessageBox for critical errors
 
 ### MCP Server Integration
 - 11 MCP tools for AI control (instances, tasks, config, screenshots, logs)
 - **stdio transport** for local AI (WorkBuddy, Claude Desktop, Cursor)
 - **SSE transport** for remote/web access at `/mcp/sse`
 
+### REST API (Phase 1)
+- 11 API endpoints: configuration, status, logs, screenshots, start/stop
+- CORS enabled for cross-origin access
+
 ### MCP Settings Page (WebUI)
 - New "MCP" sidebar button
 - Shows server status, available tools, and configuration guides
-- Supports WorkBuddy, Claude Desktop, and SSE remote access
-
-## Build
-```batch
-.venv\\Scripts\\python.exe deploy\\tray\\build.py
-```
-
-## Assets
-| File | Description |
-|------|-------------|
-| `Alas.exe` | Single entry point: installer + WebUI + tray |
 
 Full changelog: [CHANGELOG.md](https://github.com/yunjies/AzurLaneAutoScript/blob/master/CHANGELOG.md)
 """
 
-ASSETS = [
-    ("Alas.exe", Path("Alas.exe")),
-]
+# No binary assets — users run Alas.bat or toolkit/webapp/alas.exe directly
+ASSETS = []
 
 
 def create_release(token: str, draft: bool = False, prerelease: bool = False):
@@ -85,7 +70,6 @@ def create_release(token: str, draft: bool = False, prerelease: bool = False):
     with urllib.request.urlopen(req) as resp:
         release = json.loads(resp.read().decode())
         upload_url = release["upload_url"].replace("{?name,label}", "")
-        release_id = release["id"]
         html_url = release["html_url"]
         print(f"  Created: {html_url}")
 
